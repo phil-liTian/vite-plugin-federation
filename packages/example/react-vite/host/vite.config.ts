@@ -1,8 +1,21 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import federation from "@originjs/vite-plugin-federation";
+/*
+ * @Author: phil
+ * @Date: 2025-07-16 17:15:16
+ */
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import federation from '@originjs/vite-plugin-federation'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), federation({ name: "react-host", shared: ["react"] })],
-});
+  plugins: [
+    react(),
+    federation({
+      name: 'react-host',
+      shared: ['react'],
+      remotes: {
+        remoteApp: 'http://localhost:5001/assets/remoteEntry.js'
+      }
+    })
+  ]
+})

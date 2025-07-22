@@ -1,3 +1,7 @@
+/*
+ * @Author: phil
+ * @Date: 2025-07-16 17:15:16
+ */
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
@@ -13,11 +17,11 @@ export default tseslint.config([
       js.configs.recommended,
       tseslint.configs.recommended,
       reactHooks.configs['recommended-latest'],
-      reactRefresh.configs.vite,
+      reactRefresh.configs.vite
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
-    },
-  },
+      globals: globals.browser
+    }
+  }
 ])

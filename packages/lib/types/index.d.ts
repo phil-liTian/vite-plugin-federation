@@ -1,47 +1,59 @@
-export default function federation(
-  options: VitePluginFederationOptions
-): Plugin;
+/*
+ * @Author: phil
+ * @Date: 2025-07-16 17:26:40
+ */
+export default function federation(options: VitePluginFederationOptions): Plugin
 
 export interface VitePluginFederationOptions {
-  name?: string;
+  name?: string
 
   // 当前模式
-  mode?: string;
+  mode?: string
 
   // 共享组件
-  shared?: Shared;
+  shared?: Shared
 
   // 暴露出去的组件
-  exposes?: Exposes;
+  exposes?: Exposes
 
   // 远程地址
-  remotes?: Remotes;
+  remotes?: Remotes
+
+  // 配置打包后的文件名，这个文件名会匹配到host配置remotes
+  filename?: string
 }
 
 // ================= shared ======================
-type Shared = (string | SharedObject)[] | SharedObject;
+type Shared = (string | SharedObject)[] | SharedObject
 
 interface SharedObject {
-  [index: string]: string | SharedConfig;
+  [index: string]: string | SharedConfig
 }
 
 interface SharedConfig {
-  import?: boolean;
+  import?: boolean
 }
 
 // ================= exposes ======================
-type Exposes = (string | ExposesObject)[] | ExposesObject;
+type Exposes = (string | ExposesObject)[] | ExposesObject
 
 interface ExposesObject {
-  [index: string]: string | string[];
+  [index: string]: string | string[]
+}
+
+interface ExposesConfig {
+  import: string
+  name?: string
 }
 
 // ================= remotes ======================
 
-type Remotes = (string | RemotesObject)[] | RemotesObject;
+type Remotes = (string | RemotesObject)[] | RemotesObject
 
 interface RemotesObject {
-  [index: string]: string | string[];
+  [index: string]: string | string[]
 }
 
-export type ConfigTypeSet = any;
+interface RemotesConfig {}
+
+export type ConfigTypeSet = SharedConfig | RemotesConfig | ExposesConfig
