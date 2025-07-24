@@ -1,10 +1,6 @@
-/*
- * @Author: phil
- * @Date: 2025-07-15 18:07:30
- */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import federation from '@originjs/vite-plugin-federation'
+import federation from '@phil/vite-plugin-federation'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -17,5 +13,8 @@ export default defineConfig({
         './Button': './src/components/Button'
       }
     })
-  ]
+  ],
+  server: {
+    port: 5001
+  }
 })

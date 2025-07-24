@@ -1,18 +1,18 @@
-import { defineConfig } from "vite";
+import { defineConfig } from 'vite'
 
 export default defineConfig({
   build: {
     lib: {
-      entry: ["./src/index.ts"],
-      formats: ["es", "cjs"],
+      entry: ['./src/index.ts'],
+      formats: ['es', 'cjs']
     },
-    target: "node14",
+    target: 'node14',
     minify: false,
     rollupOptions: {
-      external: ["fs", "path", "crypto", "magic-string"],
+      external: ['fs', 'path', 'crypto', 'magic-string'],
       output: {
-        minifyInternalExports: false,
-      },
-    },
-  },
-});
+        minifyInternalExports: false
+      }
+    }
+  }
+})

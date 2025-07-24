@@ -9,6 +9,6 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@originjs/vite-plugin-federation": "workspace:*"
+    "@phil/vite-plugin-federation": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@originjs/vite-plugin-federation",
+  "name": "@phil/vite-plugin-federation",
   "version": "1.0.0",
   "description": "",
   "type": "module",
@@ -17,5 +17,10 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.10.0"
+  "packageManager": "pnpm@10.10.0",
+  "dependencies": {
+    "@rollup/plugin-virtual": "^3.0.2",
+    "rollup": "^4.45.1",
+    "vite": "^7.0.4"
+  }
 }

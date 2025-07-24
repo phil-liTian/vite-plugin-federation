@@ -8,5 +8,10 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "@phil/vite-plugin-federation": "link:packages/lib",
+    "lib": "link:../../../../Library/pnpm/global/5/node_modules/lib",
+    "vite-plugin-federation": "link:../../../../Library/pnpm/global/5/node_modules/@originjs/vite-plugin-federation"
+  }
 }

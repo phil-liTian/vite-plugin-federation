@@ -1,2 +1,6 @@
 packages:
-  - "packages/**"
+  - packages/**
+overrides:
+  lib: link:../../../../Library/pnpm/global/5/node_modules/lib
+  '@phil/vite-plugin-federation': link:packages/lib
+  vite-plugin-federation: link:../../../../Library/pnpm/global/5/node_modules/@originjs/vite-plugin-federation
