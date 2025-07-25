@@ -6,6 +6,8 @@ import { devSharedPlugin } from './dev/shared-development'
 import { devExposePlugin } from './dev/expose-development'
 import { devRemotePlugin } from './dev/remote-development'
 import { prodExposePlugin } from './prod/expose-production'
+import { prodRemotePlugin } from './prod/remote-production'
+import { builderInfo } from './public'
 
 function federation(options: VitePluginFederationOptions) {
   let pluginList: PluginHooks[] = []
@@ -16,7 +18,7 @@ function federation(options: VitePluginFederationOptions) {
       pluginList = [devSharedPlugin(options), devExposePlugin(options), devRemotePlugin(options)]
     } else if (mode === 'production' || command === 'build') {
       // TODO: 生产
-      pluginList = [prodExposePlugin(options)]
+      pluginList = [prodExposePlugin(options), prodRemotePlugin(options)]
     }
 
     let virtualFiles = {}
@@ -25,43 +27,48 @@ function federation(options: VitePluginFederationOptions) {
         virtualFiles = Object.assign(virtualFiles, plugin.virtualFile)
       }
     })
-
     virtualMod = virtual(virtualFiles)
-    console.log('virtualFiles', virtualMod)
   }
 
   return {
     name: 'vite:federation',
+    enforce: 'post',
     options: (_options) => {
-      // console.log('_options----', _options)
+      console.log('_options----')
     },
     config: (config: UserConfig, env: ConfigEnv) => {
+      console.log('config2----')
       // console.log("config", config, env);
       options.mode = options.mode ?? env.mode
+      builderInfo.assetsDir = config.build?.assetsDir ?? 'assets'
       registerPlugins(options?.mode, env.command)
     },
     configResolved(config: ResolvedConfig) {
+      console.log(
+        'configResolved----'
+        // config.plugins.map((v) => v.name)
+      )
+
       for (const pluginHook of pluginList) {
-        // console.log('pluginHook.configResolved', pluginHook)
-        // pluginHook.configResolved?.call(this, config)
+        pluginHook.configResolved?.call(this, config)
       }
     },
     resolveId(...args) {
       const v = virtualMod.resolveId.call(this, ...args)
-      console.log('resolveId======>', v)
+      // virtual:__remoteEntryHelper__remoteEntry.js
+      console.log('resolveId', v)
 
       if (v) return v
     },
     // TODO
     load(...args) {
       const v = virtualMod.load.call(this, ...args)
-      // console.log('v----->', v)
+
       if (v) return v
       return null
       // console.log('args', args)
     },
     buildStart(inputOptions) {
-
       for (const pluginHook of pluginList) {
         pluginHook.buildStart?.call(this, inputOptions)
       }
@@ -73,6 +80,18 @@ function federation(options: VitePluginFederationOptions) {
       for (const pluginHook of pluginList) {
         pluginHook.generateBundle?.call(this, _options, bundle, isWrite)
       }
+    },
+
+    transform(code: string, id: string) {
+      // console.log('transform', id)
+
+      for (const pluginHook of pluginList) {
+        const result = pluginHook.transform?.call(this, code, id)
+        if (result) {
+          return result
+        }
+      }
+      return code
     }
   }
 }

@@ -2,7 +2,7 @@
  * @Author: phil
  * @Date: 2025-07-17 20:48:42
  */
-import { ConfigTypeSet, Exposes, Remotes, Shared, VitePluginFederationOptions } from 'types'
+import { ConfigTypeSet, Exposes, Remotes, RemotesConfig, Shared, VitePluginFederationOptions } from 'types'
 import { posix } from 'path'
 
 export function parseOptions(
@@ -50,7 +50,9 @@ export function parseSharedOptions(options: VitePluginFederationOptions): (strin
   return parseOptions(
     options.shared || {},
     (item) => {
-      return {}
+      return {
+        
+      }
     },
     (item) => {
       return {}
@@ -63,9 +65,13 @@ export function parseRemoteOptions(options: VitePluginFederationOptions): (strin
   return parseOptions(
     options.remotes || {},
     (item) => {
-      console.log('item-->', item)
-
-      return {}
+      return {
+        external: Array.isArray(item) ? item : [item],
+        shareScope: 'default',
+        format: 'esm',
+        from: 'vite',
+        externalType: 'url'
+      }
     },
     (item) => {
       return {}
@@ -132,3 +138,5 @@ export function removeNonRegLetter(str: string, reg = letterReg): string {
   // 返回处理后的结果字符串
   return ret
 }
+
+export type Remote = { id: string, regexp: RegExp, config: RemotesConfig }

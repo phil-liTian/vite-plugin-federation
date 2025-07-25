@@ -54,6 +54,16 @@ interface RemotesObject {
   [index: string]: string | string[]
 }
 
-interface RemotesConfig {}
+interface RemotesConfig {
+  external: string
+
+  externalType: 'url' | 'promise'
+
+  shareScope?: string
+
+  format?: 'esm' | 'systemjs' | 'var'
+
+  from?: 'vite' | 'webpack'
+}
 
 export type ConfigTypeSet = SharedConfig | RemotesConfig | ExposesConfig

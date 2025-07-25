@@ -50,12 +50,18 @@ const EXPOSES_MAP = /* @__PURE__ */ new Map();
 const EXPOSES_KEY_MAP = /* @__PURE__ */ new Map();
 const DYNAMIC_LOADING_CSS = "dynamicLoadingCss";
 const DYNAMIC_LOADING_CSS_PREFIX = "__v__css__";
+const prodRemotes = [];
+const devRemotes = [];
+const builderInfo = {
+  assetsDir: ""
+};
 const parsedOptions = {
   // dev
   devShared: [],
   devExpose: [],
   devRemote: [],
-  prodExpose: []
+  prodExpose: [],
+  prodRemote: []
 };
 function parseOptions(options, normalizeSimple, normalizeOptions) {
   if (!options) return [];
@@ -103,8 +109,13 @@ function parseRemoteOptions(options) {
   return parseOptions(
     options.remotes || {},
     (item) => {
-      console.log("item-->", item);
-      return {};
+      return {
+        external: Array.isArray(item) ? item : [item],
+        shareScope: "default",
+        format: "esm",
+        from: "vite",
+        externalType: "url"
+      };
     },
     (item) => {
       return {};
@@ -159,10 +170,198 @@ function devExposePlugin(options) {
     name: "vite:expose-development"
   };
 }
+class WalkerBase {
+  constructor() {
+    this.should_skip = false;
+    this.should_remove = false;
+    this.replacement = null;
+    this.context = {
+      skip: () => this.should_skip = true,
+      remove: () => this.should_remove = true,
+      replace: (node) => this.replacement = node
+    };
+  }
+  /**
+   * @template {Node} Parent
+   * @param {Parent | null | undefined} parent
+   * @param {keyof Parent | null | undefined} prop
+   * @param {number | null | undefined} index
+   * @param {Node} node
+   */
+  replace(parent, prop, index, node) {
+    if (parent && prop) {
+      if (index != null) {
+        parent[prop][index] = node;
+      } else {
+        parent[prop] = node;
+      }
+    }
+  }
+  /**
+   * @template {Node} Parent
+   * @param {Parent | null | undefined} parent
+   * @param {keyof Parent | null | undefined} prop
+   * @param {number | null | undefined} index
+   */
+  remove(parent, prop, index) {
+    if (parent && prop) {
+      if (index !== null && index !== void 0) {
+        parent[prop].splice(index, 1);
+      } else {
+        delete parent[prop];
+      }
+    }
+  }
+}
+class SyncWalker extends WalkerBase {
+  /**
+   *
+   * @param {SyncHandler} [enter]
+   * @param {SyncHandler} [leave]
+   */
+  constructor(enter, leave) {
+    super();
+    this.should_skip = false;
+    this.should_remove = false;
+    this.replacement = null;
+    this.context = {
+      skip: () => this.should_skip = true,
+      remove: () => this.should_remove = true,
+      replace: (node) => this.replacement = node
+    };
+    this.enter = enter;
+    this.leave = leave;
+  }
+  /**
+   * @template {Node} Parent
+   * @param {Node} node
+   * @param {Parent | null} parent
+   * @param {keyof Parent} [prop]
+   * @param {number | null} [index]
+   * @returns {Node | null}
+   */
+  visit(node, parent, prop, index) {
+    if (node) {
+      if (this.enter) {
+        const _should_skip = this.should_skip;
+        const _should_remove = this.should_remove;
+        const _replacement = this.replacement;
+        this.should_skip = false;
+        this.should_remove = false;
+        this.replacement = null;
+        this.enter.call(this.context, node, parent, prop, index);
+        if (this.replacement) {
+          node = this.replacement;
+          this.replace(parent, prop, index, node);
+        }
+        if (this.should_remove) {
+          this.remove(parent, prop, index);
+        }
+        const skipped = this.should_skip;
+        const removed = this.should_remove;
+        this.should_skip = _should_skip;
+        this.should_remove = _should_remove;
+        this.replacement = _replacement;
+        if (skipped) return node;
+        if (removed) return null;
+      }
+      let key;
+      for (key in node) {
+        const value = node[key];
+        if (value && typeof value === "object") {
+          if (Array.isArray(value)) {
+            const nodes = (
+              /** @type {Array<unknown>} */
+              value
+            );
+            for (let i = 0; i < nodes.length; i += 1) {
+              const item = nodes[i];
+              if (isNode(item)) {
+                if (!this.visit(item, node, key, i)) {
+                  i--;
+                }
+              }
+            }
+          } else if (isNode(value)) {
+            this.visit(value, node, key, null);
+          }
+        }
+      }
+      if (this.leave) {
+        const _replacement = this.replacement;
+        const _should_remove = this.should_remove;
+        this.replacement = null;
+        this.should_remove = false;
+        this.leave.call(this.context, node, parent, prop, index);
+        if (this.replacement) {
+          node = this.replacement;
+          this.replace(parent, prop, index, node);
+        }
+        if (this.should_remove) {
+          this.remove(parent, prop, index);
+        }
+        const removed = this.should_remove;
+        this.replacement = _replacement;
+        this.should_remove = _should_remove;
+        if (removed) return null;
+      }
+    }
+    return node;
+  }
+}
+function isNode(value) {
+  return value !== null && typeof value === "object" && "type" in value && typeof value.type === "string";
+}
+function walk(ast, { enter, leave }) {
+  const instance = new SyncWalker(enter, leave);
+  return instance.visit(ast, null);
+}
 function devRemotePlugin(options) {
   parsedOptions.devRemote = parseRemoteOptions(options);
+  for (const item of parsedOptions.devRemote) {
+    devRemotes.push({
+      id: item[0],
+      regexp: new RegExp(`^${item[0]}/.+?`),
+      config: item[1]
+    });
+  }
   return {
-    name: "vite:remote-development"
+    name: "vite:remote-development",
+    virtualFile: options.remotes ? {
+      __federation__: `
+        const loadJS = async (url, fn) => {
+          const resolvedUrl = typeof url === 'function' ? await url() : url;
+          const script = document.createElement('script')
+          script.type = 'text/javascript';
+          script.onload = fn;
+          script.src = resolvedUrl;
+          console.log('resolvedUrl', resolvedUrl)
+          document.getElementsByTagName('head')[0].appendChild(script);
+        }
+      `
+    } : {
+      __federation__: ""
+    },
+    transform(code, id) {
+      let ast;
+      try {
+        ast = this.parse(code);
+      } catch (e) {
+        console.error(e);
+      }
+      walk(ast, {
+        enter(node) {
+          var _a, _b, _c;
+          if (node.type === "ImportDeclaration" && ((_a = node.source) == null ? void 0 : _a.value) === "virtual:__federation__") ;
+          if ((node.type === "ImportExpression" || node.type === "ImportDeclaration" || node.type === "ExportNamedDeclaration") && ((_c = (_b = node.source) == null ? void 0 : _b.value) == null ? void 0 : _c.indexOf("/")) > -1) {
+            const moduleId = node.source.value;
+            console.log("moduleId", moduleId);
+            const remote = devRemotes.find((r) => r.regexp.test(moduleId));
+            console.log("remote", remote);
+          }
+        }
+      });
+    }
   };
 }
 function prodExposePlugin(options) {
@@ -174,7 +373,7 @@ function prodExposePlugin(options) {
     EXPOSES_MAP.set(item[0], exposeFilepath);
     EXPOSES_KEY_MAP.set(item[0], `__federation_expose_${removeNonRegLetter(item[0], NAME_CHAR_REG)}`);
     moduleMap += `
-"${item[0]}"()=>{
+"${item[0]}":()=>{
       ${DYNAMIC_LOADING_CSS}('${DYNAMIC_LOADING_CSS_PREFIX}${exposeFilepath}', ${item[1].dontAppendStylesToHead}, '${item[0]}')
       return __federation_import('\${__federation_expose_${item[0]}}').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},`;
   }
@@ -183,28 +382,119 @@ function prodExposePlugin(options) {
     virtualFile: {
       [`__remoteEntryHelper__${options.filename}`]: `
       const currentImports = {}
-      `
+      const exportSet = new Set(['Module', '__esModule', 'default', '_export_sfc']);
+      let moduleMap = {${moduleMap}}
+      const seen = {}
+      export const ${DYNAMIC_LOADING_CSS} = (cssFilePaths, dontAppendStylesToHead, exposeItemName) => {
+        const metaUrl = import.meta.url;
+        if (typeof metaUrl === 'undefined') {
+          console.warn('The remote style takes effect only when the build.target option in the vite.config.ts file is higher than that of "es2020".');
+          return;
+        }
+
+        const curUrl = metaUrl.substring(0, metaUrl.lastIndexOf('${options.filename}'));
+        const base = __VITE_BASE_PLACEHOLDER__;
+        const assetsDir = __VITE_ASSETS_DIR_PLACEHOLDER__;
+
+        cssFilePaths.forEach(cssPath => {
+         let href = '';
+         const baseUrl = base || curUrl;
+         if (baseUrl) {
+           const trimmer = {
+             trailing: (path) => (path.endsWith('/') ? path.slice(0, -1) : path),
+             leading: (path) => (path.startsWith('/') ? path.slice(1) : path)
+           }
+           const isAbsoluteUrl = (url) => url.startsWith('http') || url.startsWith('//');
+
+           const cleanBaseUrl = trimmer.trailing(baseUrl);
+           const cleanCssPath = trimmer.leading(cssPath);
+           const cleanCurUrl = trimmer.trailing(curUrl);
+
+           if (isAbsoluteUrl(baseUrl)) {
+             href = [cleanBaseUrl, cleanCssPath].filter(Boolean).join('/');
+           } else {
+            if (cleanCurUrl.includes(cleanBaseUrl)) {
+              href = [cleanCurUrl, cleanCssPath].filter(Boolean).join('/');
+            } else {
+              href = [cleanCurUrl + cleanBaseUrl, cleanCssPath].filter(Boolean).join('/');
+            }
+           }
+         } else {
+           href = cssPath;
+         }
+         
+          if (dontAppendStylesToHead) {
+            const key = 'css__${options.name}__' + exposeItemName;
+            window[key] = window[key] || [];
+            window[key].push(href);
+            return;
+          }
+
+          if (href in seen) return;
+          seen[href] = true;
+
+          const element = document.createElement('link');
+          element.rel = 'stylesheet';
+          element.href = href;
+          document.head.appendChild(element);
+        });
+      };
+      async function __federation_import(name) {
+        currentImports[name] ??= import(name)
+        return currentImports[name]
+      };
+      export const get =(module) => {
+        if(!moduleMap[module]) throw new Error('Can not find remote module ' + module)
+        return moduleMap[module]();
+      };
+      export const init =(shareScope) => {
+        globalThis.__federation_shared__= globalThis.__federation_shared__|| {};
+        Object.entries(shareScope).forEach(([key, value]) => {
+          for (const [versionKey, versionValue] of Object.entries(value)) {
+            const scope = versionValue.scope || 'default'
+            globalThis.__federation_shared__[scope] = globalThis.__federation_shared__[scope] || {};
+            const shared= globalThis.__federation_shared__[scope];
+            (shared[key] = shared[key]||{})[versionKey] = versionValue;
+          }
+        });
+      }`
     },
     buildStart() {
       var _a;
       if ((_a = parsedOptions.prodExpose) == null ? void 0 : _a.length) {
         this.emitFile({
-          // fileName: `${builderInfo.assetsDir ? builderInfo.assetsDir + '/' : ''}${options.filename}`,
+          fileName: `${builderInfo.assetsDir ? builderInfo.assetsDir + "/" : ""}${options.filename}`,
           type: "chunk",
-          id: `__remoteEntryHelper__${options.filename}`
-          // preserveSignature: 'strict'
+          id: `__remoteEntryHelper__${options.filename}`,
+          preserveSignature: "strict"
         });
       }
     },
     generateBundle(_options, bundle) {
       for (const file in bundle) {
         const chunk = bundle[file];
-        console.log("chunk.facadeModuleId", chunk.facadeModuleId);
-        if (chunk.facadeModuleId === `\0virtual:__remoteEntryHelper__${options.filename}`) {
-          console.log("chunk-->", chunk);
-        }
+        if (chunk.facadeModuleId === `\0virtual:__remoteEntryHelper__${options.filename}`) ;
       }
     }
+  };
+}
+function prodRemotePlugin(options) {
+  console.log("prodRemotePlugin", options);
+  parsedOptions.prodRemote = parseRemoteOptions(options);
+  console.log("parsedOptions.prodRemote", parsedOptions.prodRemote);
+  for (const item of parsedOptions.prodRemote) {
+    prodRemotes.push({
+      id: item[0],
+      regexp: new RegExp(`^${item[0]}/.+?`),
+      config: item[1]
+    });
+  }
+  console.log("prodRemotes", prodRemotes);
+  return {
+    name: "vite:remote-production",
+    virtualFile: options.remotes ? {
+      __federation__: ""
+    } : { __federation__: "" }
   };
 }
 function federation(options) {
@@ -214,7 +504,7 @@ function federation(options) {
     if (mode === "development" || command === "serve") {
       pluginList = [devSharedPlugin(options), devExposePlugin(options), devRemotePlugin(options)];
     } else if (mode === "production" || command === "build") {
-      pluginList = [prodExposePlugin(options)];
+      pluginList = [prodExposePlugin(options), prodRemotePlugin(options)];
     }
     let virtualFiles = {};
     pluginList.forEach((plugin) => {
@@ -223,23 +513,33 @@ function federation(options) {
       }
     });
     virtualMod = virtual(virtualFiles);
-    console.log("virtualFiles", virtualMod);
   }
   return {
     name: "vite:federation",
+    enforce: "post",
     options: (_options) => {
+      console.log("_options----");
     },
     config: (config, env) => {
+      var _a;
+      console.log("config2----");
       options.mode = options.mode ?? env.mode;
+      builderInfo.assetsDir = ((_a = config.build) == null ? void 0 : _a.assetsDir) ?? "assets";
       registerPlugins(options == null ? void 0 : options.mode, env.command);
     },
     configResolved(config) {
+      var _a;
+      console.log(
+        "configResolved----"
+        // config.plugins.map((v) => v.name)
+      );
       for (const pluginHook of pluginList) {
+        (_a = pluginHook.configResolved) == null ? void 0 : _a.call(this, config);
       }
     },
     resolveId(...args) {
       const v = virtualMod.resolveId.call(this, ...args);
-      console.log("resolveId======>", v);
+      console.log("resolveId", v);
       if (v) return v;
     },
     // TODO
@@ -260,6 +560,16 @@ function federation(options) {
       for (const pluginHook of pluginList) {
         (_a = pluginHook.generateBundle) == null ? void 0 : _a.call(this, _options, bundle, isWrite);
       }
+    },
+    transform(code, id) {
+      var _a;
+      for (const pluginHook of pluginList) {
+        const result = (_a = pluginHook.transform) == null ? void 0 : _a.call(this, code, id);
+        if (result) {
+          return result;
+        }
+      }
+      return code;
     }
   };
 }

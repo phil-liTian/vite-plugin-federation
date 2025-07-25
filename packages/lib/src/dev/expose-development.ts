@@ -5,7 +5,9 @@ import { parseExposeOptions } from '../utils/index'
 export function devExposePlugin(options: VitePluginFederationOptions) {
   parsedOptions.devExpose = parseExposeOptions(options)
 
+
   return {
     name: 'vite:expose-development'
   }
 }
+

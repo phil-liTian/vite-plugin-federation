@@ -3,6 +3,7 @@
  * @Date: 2025-07-17 19:56:32
  */
 import { ConfigTypeSet } from 'types'
+import { Remote } from './utils'
 
 export const SHARED = 'shared'
 export const EXTERNALS: string[] = []
@@ -10,6 +11,8 @@ export const EXPOSES_MAP = new Map()
 export const EXPOSES_KEY_MAP = new Map()
 export const DYNAMIC_LOADING_CSS = 'dynamicLoadingCss'
 export const DYNAMIC_LOADING_CSS_PREFIX = '__v__css__'
+export const prodRemotes: Remote[] = []
+export const devRemotes: Remote[] = []
 
 export const builderInfo = {
   builder: 'rollup',
