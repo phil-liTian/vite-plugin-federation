@@ -1,5 +1,6 @@
 import * as path from "path";
-import { posix, resolve } from "path";
+import { posix, resolve, relative, dirname } from "path";
+import MagicString from "magic-string";
 const PREFIX = `\0virtual:`;
 function virtual(modules) {
   const resolvedIds = /* @__PURE__ */ new Map();
@@ -36,7 +37,8 @@ const DYNAMIC_LOADING_CSS_PREFIX = "__v__css__";
 const prodRemotes = [];
 const devRemotes = [];
 const builderInfo = {
-  assetsDir: ""
+  assetsDir: "",
+  isRemote: false
 };
 const parsedOptions = {
   // dev
@@ -121,7 +123,7 @@ function parseExposeOptions(options) {
   );
 }
 function getModuleMarker(value, type) {
-  return `__rf_${type}__${value}`;
+  return `__rf_${type || "placeholder"}__${value}`;
 }
 function normalizePath(id) {
   return posix.normalize(id.replace(/\\/g, "/"));
@@ -141,6 +143,21 @@ function removeNonRegLetter(str, reg = letterReg) {
   }
   return ret;
 }
+function createRemotesMap(remotes) {
+  const createUrl = (remote) => {
+    const external = remote.config.external[0];
+    const externalType = remote.config.externalType;
+    if (externalType === "promise") {
+      return `()=>${external}`;
+    } else {
+      return `'${external}'`;
+    }
+  };
+  return `const remotesMap = {
+${remotes.map((remote) => `'${remote.id}':{url:${createUrl(remote)},format:'${remote.config.format}',from:'${remote.config.from}'}`).join(",\n  ")}
+};`;
+}
+const REMOTE_FROM_PARAMETER = "remoteFrom";
 function devSharedPlugin(options) {
   parsedOptions.devShared = parseSharedOptions(options);
   return {
@@ -312,44 +329,181 @@ function devRemotePlugin(options) {
     name: "vite:remote-development",
     virtualFile: options.remotes ? {
       __federation__: `
-        const loadJS = async (url, fn) => {
-          const resolvedUrl = typeof url === 'function' ? await url() : url;
-          const script = document.createElement('script')
-          script.type = 'text/javascript';
-          script.onload = fn;
-          script.src = resolvedUrl;
-          console.log('resolvedUrl', resolvedUrl)
-          document.getElementsByTagName('head')[0].appendChild(script);
-        }
+          ${createRemotesMap(devRemotes)}
+            const loadJS = async (url, fn) => {
+              const resolvedUrl = typeof url === 'function' ? await url() : url;
+              const script = document.createElement('script')
+              script.type = 'text/javascript';
+              script.onload = fn;
+              script.src = resolvedUrl;
+              document.getElementsByTagName('head')[0].appendChild(script);
+            }
+            function get(name, ${REMOTE_FROM_PARAMETER}){
+              return import(/* @vite-ignore */ name).then(module => ()=> {
+                if (${REMOTE_FROM_PARAMETER} === 'webpack') {
+                  return Object.prototype.toString.call(module).indexOf('Module') > -1 && module.default ? module.default : module
+                }
+                return module
+              })
+            }
+            const wrapShareScope = ${REMOTE_FROM_PARAMETER} => {
+              return {
+                ${getModuleMarker("shareScope")}
+              }
+            }
+            const initMap = Object.create(null);
+            async function __federation_method_ensure(remoteId) {
+              const remote = remotesMap[remoteId];
+              if (!remote.inited) {
+                if ('var' === remote.format) {
+                  // loading js with script tag
+                  return new Promise(resolve => {
+                    const callback = () => {
+                      if (!remote.inited) {
+                        remote.lib = window[remoteId];
+                        remote.lib.init(wrapShareScope(remote.from))
+                        remote.inited = true;
+                      }
+                      resolve(remote.lib);
+                    }
+                    return loadJS(remote.url, callback);
+                  });
+                } else if (['esm', 'systemjs'].includes(remote.format)) {
+                  // loading js with import(...)
+                  return new Promise((resolve, reject) => {
+                    const getUrl = typeof remote.url === 'function' ? remote.url : () => Promise.resolve(remote.url);
+                    getUrl().then(url => {
+                      import(/* @vite-ignore */ url).then(lib => {
+                        if (!remote.inited) {
+                          const shareScope = wrapShareScope(remote.from)
+                          lib.init(shareScope);
+                          remote.lib = lib;
+                          remote.lib.init(shareScope);
+                          remote.inited = true;
+                        }
+                        resolve(remote.lib);
+                      }).catch(reject)
+                    })
+                  })
+                }
+              } else {
+                return remote.lib;
+              }
+            }
+
+            function __federation_method_unwrapDefault(module) {
+              return (module?.__esModule || module?.[Symbol.toStringTag] === 'Module')?module.default:module
+            }
+
+            function __federation_method_wrapDefault(module ,need){
+              if (!module?.default && need) {
+                let obj = Object.create(null);
+                obj.default = module;
+                obj.__esModule = true;
+                return obj;
+              }
+              return module; 
+            }
+
+            function __federation_method_getRemote(remoteName,  componentName){
+              return __federation_method_ensure(remoteName).then((remote) => remote.get(componentName).then(factory => factory()));
+            }
+
+            function __federation_method_setRemote(remoteName, remoteConfig) {
+              remotesMap[remoteName] = remoteConfig;
+            }
+            export {__federation_method_ensure, __federation_method_getRemote , __federation_method_setRemote , __federation_method_unwrapDefault , __federation_method_wrapDefault}
       `
     } : {
       __federation__: ""
     },
     transform(code, id) {
       let ast;
+      if (id === "\0virtual:__federation__") {
+        return code.replace(getModuleMarker("shareScope"), "");
+      }
       try {
         ast = this.parse(code);
       } catch (e) {
         console.error(e);
       }
+      if (!ast) return null;
+      const magicString = new MagicString(code);
+      const hasStaticImported = /* @__PURE__ */ new Map();
+      let manualRequired = null;
+      let requiresRuntime = false;
       walk(ast, {
         enter(node) {
-          var _a, _b, _c;
-          if (node.type === "ImportDeclaration" && ((_a = node.source) == null ? void 0 : _a.value) === "virtual:__federation__") ;
+          var _a, _b, _c, _d;
+          if (node.type === "ImportDeclaration" && ((_a = node.source) == null ? void 0 : _a.value) === "virtual:__federation__") {
+            manualRequired = node;
+          }
           if ((node.type === "ImportExpression" || node.type === "ImportDeclaration" || node.type === "ExportNamedDeclaration") && ((_c = (_b = node.source) == null ? void 0 : _b.value) == null ? void 0 : _c.indexOf("/")) > -1) {
             const moduleId = node.source.value;
-            console.log("moduleId", moduleId);
             const remote = devRemotes.find((r) => r.regexp.test(moduleId));
-            console.log("remote", remote);
+            if (remote) {
+              const modName = `.${moduleId.slice(remote.id.length)}`;
+              requiresRuntime = true;
+              switch (node.type) {
+                case "ImportDeclaration": {
+                  if ((_d = node.specifiers) == null ? void 0 : _d.length) {
+                    const afterImportName = `__federation_var_${moduleId.replace(/[@/\\.-]/g, "")}`;
+                    if (!hasStaticImported.has(moduleId)) {
+                      magicString.overwrite(
+                        node.start,
+                        node.end,
+                        `const ${afterImportName} = await __federation_method_getRemote(${JSON.stringify(remote.id)} , ${JSON.stringify(modName)});`
+                      );
+                      hasStaticImported.set(moduleId, afterImportName);
+                    }
+                    let deconstructStr = "";
+                    node.specifiers.forEach((spec) => {
+                      if (spec.type === "ImportDefaultSpecifier") {
+                        magicString.appendRight(node.end, `
+ let ${spec.local.name} = __federation_method_unwrapDefault(${afterImportName}) `);
+                      } else if (spec.type === "ImportSpecifier") {
+                        const importedName = spec.imported.name;
+                        const localName = spec.local.name;
+                        deconstructStr += `${localName === importedName ? localName : `${importedName}: ${localName}`}`;
+                      }
+                    });
+                    if (deconstructStr == null ? void 0 : deconstructStr.length) {
+                      magicString.appendRight(node.end, `
+ let { ${deconstructStr} } = ${afterImportName}`);
+                    }
+                  }
+                  break;
+                }
+              }
+            }
           }
         }
       });
+      if (requiresRuntime) {
+        let requiresCode = `import {__federation_method_ensure, __federation_method_getRemote , __federation_method_wrapDefault , __federation_method_unwrapDefault} from '__federation__';
+
+`;
+        if (manualRequired) {
+          requiresCode = `import {__federation_method_setRemote, __federation_method_ensure, __federation_method_getRemote , __federation_method_wrapDefault , __federation_method_unwrapDefault} from '__federation__';
+
+`;
+        }
+        magicString.prepend(requiresCode);
+      }
+      return magicString.toString();
     }
   };
 }
 function prodExposePlugin(options) {
   let moduleMap = "";
-  parsedOptions.prodExpose = Array.prototype.concat(parsedOptions.prodExpose, parseExposeOptions(options));
+  const hasOptions = parsedOptions.prodExpose.some((expose) => {
+    var _a;
+    return expose[0] === ((_a = parseExposeOptions(options)[0]) == null ? void 0 : _a[0]);
+  });
+  console.log("hasOptions", hasOptions);
+  if (!hasOptions) {
+    parsedOptions.prodExpose = Array.prototype.concat(parsedOptions.prodExpose, parseExposeOptions(options));
+  }
   for (const item of parseExposeOptions(options)) {
     getModuleMarker(`\${${item[0]}}`, SHARED);
     const exposeFilepath = normalizePath(resolve(item[1].import));
@@ -454,9 +608,47 @@ function prodExposePlugin(options) {
       }
     },
     generateBundle(_options, bundle) {
+      let remoteEntryChunk;
       for (const file in bundle) {
         const chunk = bundle[file];
-        if (chunk.facadeModuleId === `\0virtual:__remoteEntryHelper__${options.filename}`) ;
+        if (chunk.facadeModuleId === `\0virtual:__remoteEntryHelper__${options.filename}`) {
+          remoteEntryChunk = chunk;
+        }
+      }
+      if (remoteEntryChunk) {
+        remoteEntryChunk.code = remoteEntryChunk.code.replace(`__VITE_BASE_PLACEHOLDER__`, `''`).replace("__VITE_ASSETS_DIR_PLACEHOLDER__", `''`);
+        for (const expose of parseExposeOptions(options)) {
+          const module = Object.keys(bundle).find((module2) => {
+            const chunk = bundle[module2];
+            console.log("chunk", chunk.name);
+            return chunk.name === EXPOSES_KEY_MAP.get(expose[0]);
+          });
+          console.log("modlue", module);
+          if (module) {
+            const chunk = bundle[module];
+            const fileRelativePath = relative(dirname(remoteEntryChunk.fileName), chunk.fileName);
+            const slashPath = fileRelativePath.replace(/\\/g, "/");
+            console.log("slashPath", slashPath, expose[0]);
+            remoteEntryChunk.code = remoteEntryChunk.code.replace(`\${__federation_expose_${expose[0]}}`, `./${slashPath}`);
+          }
+        }
+        let ast = null;
+        try {
+          ast = this.parse(remoteEntryChunk.code);
+        } catch (err) {
+          console.log("err", err);
+        }
+        const magicString = new MagicString(remoteEntryChunk.code);
+        if (!ast) return;
+        walk(ast, {
+          enter(node) {
+            var _a, _b;
+            if (node && node.type === "CallExpression" && typeof ((_a = node.arguments[0]) == null ? void 0 : _a.value) === "string" && ((_b = node.arguments[0]) == null ? void 0 : _b.value.indexOf(`${DYNAMIC_LOADING_CSS_PREFIX}`)) > -1) {
+              magicString.remove(node.start, node.end + 1);
+            }
+          }
+        });
+        remoteEntryChunk.code = magicString.toString();
       }
     }
   };
@@ -477,7 +669,22 @@ function prodRemotePlugin(options) {
     name: "vite:remote-production",
     virtualFile: options.remotes ? {
       __federation__: ""
-    } : { __federation__: "" }
+    } : { __federation__: "" },
+    transform(code, id) {
+      var _a;
+      if (builderInfo.isRemote) {
+        for (const expose of parsedOptions.prodExpose) {
+          if (!((_a = expose[1]) == null ? void 0 : _a.emitFile)) {
+            expose[1].emitFile = this.emitFile({
+              type: "chunk",
+              id: expose[1].id ?? expose[1].import,
+              name: EXPOSES_KEY_MAP.get(expose[0]),
+              preserveSignature: "allow-extension"
+            });
+          }
+        }
+      }
+    }
   };
 }
 function federation(options) {
@@ -489,6 +696,7 @@ function federation(options) {
     } else if (mode === "production" || command === "build") {
       pluginList = [prodExposePlugin(options), prodRemotePlugin(options)];
     }
+    builderInfo.isRemote = !!(parsedOptions.devExpose.length || parsedOptions.prodExpose.length);
     let virtualFiles = {};
     pluginList.forEach((plugin) => {
       if (plugin.virtualFile) {
@@ -522,8 +730,13 @@ function federation(options) {
     },
     resolveId(...args) {
       const v = virtualMod.resolveId.call(this, ...args);
-      console.log("resolveId", v);
       if (v) return v;
+      if (args[0] === "virtual:__federation__") {
+        return {
+          id: "\0virtual:__federation__",
+          moduleSideEffects: true
+        };
+      }
     },
     // TODO
     load(...args) {

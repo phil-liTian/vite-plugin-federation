@@ -7,7 +7,7 @@ import { devExposePlugin } from './dev/expose-development'
 import { devRemotePlugin } from './dev/remote-development'
 import { prodExposePlugin } from './prod/expose-production'
 import { prodRemotePlugin } from './prod/remote-production'
-import { builderInfo } from './public'
+import { builderInfo, parsedOptions } from './public'
 
 function federation(options: VitePluginFederationOptions) {
   let pluginList: PluginHooks[] = []
@@ -20,6 +20,8 @@ function federation(options: VitePluginFederationOptions) {
       // TODO: 生产
       pluginList = [prodExposePlugin(options), prodRemotePlugin(options)]
     }
+
+    builderInfo.isRemote = !!(parsedOptions.devExpose.length || parsedOptions.prodExpose.length)
 
     let virtualFiles = {}
     pluginList.forEach((plugin) => {
@@ -56,9 +58,14 @@ function federation(options: VitePluginFederationOptions) {
     resolveId(...args) {
       const v = virtualMod.resolveId.call(this, ...args)
       // virtual:__remoteEntryHelper__remoteEntry.js
-      console.log('resolveId', v)
-
       if (v) return v
+
+      if (args[0] === 'virtual:__federation__') {
+        return {
+          id: '\0virtual:__federation__',
+          moduleSideEffects: true
+        }
+      }
     },
     // TODO
     load(...args) {
@@ -83,8 +90,6 @@ function federation(options: VitePluginFederationOptions) {
     },
 
     transform(code: string, id: string) {
-      // console.log('transform', id)
-
       for (const pluginHook of pluginList) {
         const result = pluginHook.transform?.call(this, code, id)
         if (result) {

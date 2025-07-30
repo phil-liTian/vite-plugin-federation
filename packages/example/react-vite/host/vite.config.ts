@@ -14,7 +14,7 @@ export default defineConfig({
       name: 'react-host',
       shared: ['react'],
       remotes: {
-        remoteApp: 'http://localhost:4174/assets/remoteEntry.js'
+        remoteApp: 'http://localhost:4173/assets/remoteEntry.js'
       }
     })
   ]

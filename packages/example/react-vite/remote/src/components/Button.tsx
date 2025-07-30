@@ -1,1 +1,1 @@
-export const Button = <div>remote button</div>
+export const Button = () => <div>remote button</div>

@@ -191,6 +191,9 @@ importers:
       estree-walker:
         specifier: ^3.0.3
         version: 3.0.3
+      magic-string:
+        specifier: ^0.30.17
+        version: 0.30.17
       rollup:
         specifier: ^4.45.1
         version: 4.45.1

@@ -50,9 +50,7 @@ export function parseSharedOptions(options: VitePluginFederationOptions): (strin
   return parseOptions(
     options.shared || {},
     (item) => {
-      return {
-        
-      }
+      return {}
     },
     (item) => {
       return {}
@@ -139,4 +137,20 @@ export function removeNonRegLetter(str: string, reg = letterReg): string {
   return ret
 }
 
-export type Remote = { id: string, regexp: RegExp, config: RemotesConfig }
+export function createRemotesMap(remotes: Remote[]): string {
+  const createUrl = (remote: Remote) => {
+    const external = remote.config.external[0]
+    const externalType = remote.config.externalType
+    if (externalType === 'promise') {
+      return `()=>${external}`
+    } else {
+      return `'${external}'`
+    }
+  }
+  return `const remotesMap = {
+${remotes.map((remote) => `'${remote.id}':{url:${createUrl(remote)},format:'${remote.config.format}',from:'${remote.config.from}'}`).join(',\n  ')}
+};`
+}
+
+export const REMOTE_FROM_PARAMETER = 'remoteFrom'
+export type Remote = { id: string; regexp: RegExp; config: RemotesConfig }
