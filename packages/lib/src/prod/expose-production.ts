@@ -1,20 +1,23 @@
-import { resolve } from 'path'
+import { dirname, relative, resolve } from 'path'
 import { OutputChunk } from 'rollup'
 import { NAME_CHAR_REG, normalizePath, parseExposeOptions, parseOptions, parseSharedOptions, removeNonRegLetter } from '../utils/index'
 import { parsedOptions, SHARED, EXTERNALS, EXPOSES_MAP, EXPOSES_KEY_MAP, DYNAMIC_LOADING_CSS, DYNAMIC_LOADING_CSS_PREFIX, builderInfo } from '../public'
 import { getModuleMarker } from '../utils/index'
 import { VitePluginFederationOptions } from 'types'
 import { PluginHooks } from 'types/pluginHooks'
+import { walk } from 'estree-walker'
+import MagicString from 'magic-string'
 
 //
 export function prodExposePlugin(options: VitePluginFederationOptions): PluginHooks {
   let moduleMap = ''
 
-  // const hasOptions = parsedOptions.prodExpose.some((expose) => {
+  const hasOptions = parsedOptions.prodExpose.some((expose) => expose[0] === parseExposeOptions(options)[0]?.[0])
+  console.log('hasOptions', hasOptions)
 
-  // })
-
-  parsedOptions.prodExpose = Array.prototype.concat(parsedOptions.prodExpose, parseExposeOptions(options))
+  if (!hasOptions) {
+    parsedOptions.prodExpose = Array.prototype.concat(parsedOptions.prodExpose, parseExposeOptions(options))
+  }
 
   // exposes module
   for (const item of parseExposeOptions(options)) {
@@ -27,6 +30,7 @@ export function prodExposePlugin(options: VitePluginFederationOptions): PluginHo
     EXPOSES_MAP.set(item[0], exposeFilepath)
     // { './Button' => '__federation_expose_Button' }
     EXPOSES_KEY_MAP.set(item[0], `__federation_expose_${removeNonRegLetter(item[0], NAME_CHAR_REG)}`)
+
     moduleMap += `\n"${item[0]}":()=>{
       ${DYNAMIC_LOADING_CSS}('${DYNAMIC_LOADING_CSS_PREFIX}${exposeFilepath}', ${item[1].dontAppendStylesToHead}, '${item[0]}')
       return __federation_import('\${__federation_expose_${item[0]}}').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},`
@@ -123,11 +127,6 @@ export function prodExposePlugin(options: VitePluginFederationOptions): PluginHo
           id: `__remoteEntryHelper__${options.filename}`,
           preserveSignature: 'strict'
         })
-        // this.emitFile({
-        //   type: 'asset',
-        //   name: 'config.json',
-        //   source: JSON.stringify({ version: '1.0.0' })
-        // })
       }
     },
 
@@ -141,7 +140,55 @@ export function prodExposePlugin(options: VitePluginFederationOptions): PluginHo
           remoteEntryChunk = chunk
         }
       }
+
+      if (remoteEntryChunk) {
+        remoteEntryChunk.code = remoteEntryChunk.code.replace(`__VITE_BASE_PLACEHOLDER__`, `''`).replace('__VITE_ASSETS_DIR_PLACEHOLDER__', `''`)
+
+        for (const expose of parseExposeOptions(options)) {
+          const module = Object.keys(bundle).find((module) => {
+            const chunk = bundle[module] as OutputChunk
+            console.log('chunk', chunk.name)
+
+            return chunk.name === EXPOSES_KEY_MAP.get(expose[0])
+          })
+
+          console.log('modlue', module)
+
+          if (module) {
+            // console.log('module', module)
+            const chunk = bundle[module]
+            // console.log('chunk', chunk)
+            const fileRelativePath = relative(dirname(remoteEntryChunk.fileName), chunk.fileName)
+
+            const slashPath = fileRelativePath.replace(/\\/g, '/')
+            console.log('slashPath', slashPath, expose[0])
+
+            remoteEntryChunk.code = remoteEntryChunk.code.replace(`\${__federation_expose_${expose[0]}}`, `./${slashPath}`)
+          }
+        }
+
+        // 去掉动态引入样式的代码
+        let ast: any = null
+
+        try {
+          ast = this.parse(remoteEntryChunk.code)
+        } catch (err) {
+          console.log('err', err)
+        }
+
+        const magicString = new MagicString(remoteEntryChunk.code)
+        if (!ast) return
+
+        walk(ast, {
+          enter(node: any) {
+            if (node && node.type === 'CallExpression' && typeof node.arguments[0]?.value === 'string' && node.arguments[0]?.value.indexOf(`${DYNAMIC_LOADING_CSS_PREFIX}`) > -1) {
+              magicString.remove(node.start, node.end + 1)
+            }
+          }
+        })
+
+        remoteEntryChunk.code = magicString.toString()
+      }
     }
   }
 }
-
