@@ -1,7 +1,7 @@
 import { VitePluginFederationOptions } from 'types'
 import { walk } from 'estree-walker'
 import MagicString from 'magic-string'
-import { parsedOptions, devRemotes, builderInfo } from '../public'
+import { parsedOptions, devRemotes } from '../public'
 import { createRemotesMap, getModuleMarker, parseRemoteOptions, REMOTE_FROM_PARAMETER } from '../utils/index'
 import { TransformPluginContext } from 'rollup'
 
@@ -16,7 +16,7 @@ export function devRemotePlugin(options: VitePluginFederationOptions) {
     })
   }
 
-  const needHandleFileType = ['.js']
+  // const needHandleFileType = ['.js']
 
   return {
     name: 'vite:remote-development',

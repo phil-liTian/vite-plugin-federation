@@ -1,6 +1,6 @@
 import { dirname, relative, resolve } from 'path'
 import { OutputChunk } from 'rollup'
-import { NAME_CHAR_REG, normalizePath, parseExposeOptions, parseOptions, parseSharedOptions, removeNonRegLetter } from '../utils/index'
+import { NAME_CHAR_REG, normalizePath, parseExposeOptions, removeNonRegLetter } from '../utils/index'
 import { parsedOptions, SHARED, EXTERNALS, EXPOSES_MAP, EXPOSES_KEY_MAP, DYNAMIC_LOADING_CSS, DYNAMIC_LOADING_CSS_PREFIX, builderInfo } from '../public'
 import { getModuleMarker } from '../utils/index'
 import { VitePluginFederationOptions } from 'types'

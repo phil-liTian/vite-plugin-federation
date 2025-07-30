@@ -36,7 +36,7 @@ function federation(options: VitePluginFederationOptions) {
     name: 'vite:federation',
     enforce: 'post',
     options: (_options) => {
-      console.log('_options----')
+      console.log('_options----', _options)
     },
     config: (config: UserConfig, env: ConfigEnv) => {
       console.log('config2----')

@@ -50,9 +50,13 @@ export function parseSharedOptions(options: VitePluginFederationOptions): (strin
   return parseOptions(
     options.shared || {},
     (item) => {
+      console.log('item', item)
+
       return {}
     },
     (item) => {
+      console.log('item', item)
+
       return {}
     }
   )
@@ -72,6 +76,8 @@ export function parseRemoteOptions(options: VitePluginFederationOptions): (strin
       }
     },
     (item) => {
+      console.log('item', item)
+
       return {}
     }
   )
@@ -89,6 +95,8 @@ export function parseExposeOptions(options: VitePluginFederationOptions): (strin
       }
     },
     (item) => {
+      console.log('item', item)
+
       return {}
     }
   )

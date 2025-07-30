@@ -1,3 +1,7 @@
+/*
+ * @Author: phil
+ * @Date: 2025-07-25 10:00:48
+ */
 import { TransformPluginContext } from 'rollup'
 import { parseRemoteOptions } from '../utils/index'
 import { VitePluginFederationOptions } from 'types'
@@ -28,7 +32,7 @@ export function prodRemotePlugin(options: VitePluginFederationOptions): PluginHo
       : { __federation__: '' },
 
     transform(this: TransformPluginContext, code: string, id: string) {
-      // console.log('code', code, id)
+      console.log('code', code, id)
 
       // 是远程项目 提供组件的项目, 生成组件对应的js文件
       if (builderInfo.isRemote) {
