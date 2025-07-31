@@ -1,0 +1,386 @@
+# 模块联邦开发规范
+
+## 1. 模块设计原则
+
+### 模块粒度
+- 按业务功能划分模块，保持适当粒度
+- 避免过大的模块（难以维护）和过小的模块（增加复杂性）
+- 一个模块应该专注于一个明确的业务领域或功能集合
+
+### 模块独立性
+- 模块应尽可能独立，减少跨模块依赖
+- 模块内部实现细节应该封装，不对外暴露
+- 通过明确定义的接口与其他模块交互
+
+### 模块稳定性
+- 暴露的API应保持稳定，避免频繁变更
+- 遵循语义化版本控制原则
+- 对API的重大变更需要提前规划和通知
+
+## 2. 模块暴露规范
+
+### 暴露命名
+- 使用驼峰命名法（camelCase）
+- 名称应清晰表明模块功能
+- 避免过于通用的名称，防止命名冲突
+
+```typescript
+// 推荐
+exposes: {
+  './userManagement': './src/components/UserManagement.tsx',
+  './dataVisualization': './src/components/DataVisualization.tsx'
+}
+
+// 不推荐
+exposes: {
+  './component': './src/components/UserManagement.tsx',
+  './chart': './src/components/DataVisualization.tsx'
+}
+```
+
+### 暴露路径
+- 使用相对路径指向实际文件
+- 确保路径正确且文件存在
+- 避免使用动态路径或路径别名
+
+```typescript
+// 推荐
+exposes: {
+  './Button': './src/components/Button.tsx'
+}
+
+// 不推荐
+exposes: {
+  './Button': '@components/Button'  // 使用了路径别名
+}
+```
+
+### 暴露内容
+- 组件应该是自包含的，包括所有必要的样式和逻辑
+- 明确声明组件的props接口
+- 提供适当的默认值和类型检查
+
+```typescript
+// 推荐
+// Button.tsx
+import React from 'react';
+import './Button.css';
+
+interface ButtonProps {
+  text: string;
+  onClick?: () => void;
+  variant?: 'primary' | 'secondary';
+}
+
+export const Button: React.FC<ButtonProps> = ({
+  text,
+  onClick,
+  variant = 'primary'
+}) => {
+  return (
+    <button 
+      className={`button ${variant}`} 
+      onClick={onClick}
+    >
+      {text}
+    </button>
+  );
+};
+```
+
+## 3. 共享依赖规范
+
+### 依赖声明
+- 明确声明共享的依赖项
+- 指定兼容的版本范围
+- 避免共享内部库或不稳定的依赖
+
+```typescript
+// 推荐
+shared: {
+  react: { 
+    singleton: true, 
+    requiredVersion: '^18.0.0' 
+  },
+  'react-dom': { 
+    singleton: true, 
+    requiredVersion: '^18.0.0' 
+  }
+}
+```
+
+### 单例模式
+- 对状态库（如Redux、MobX）使用singleton模式
+- 对UI框架（如React、Vue）使用singleton模式
+- 对工具库可根据需要决定是否使用singleton
+
+```typescript
+// 推荐
+shared: {
+  react: { singleton: true },
+  'react-dom': { singleton: true },
+  redux: { singleton: true },
+  lodash: { singleton: false }  // 工具库可以不使用singleton
+}
+```
+
+### 版本控制
+- 使用语义化版本控制
+- 明确指定兼容的版本范围
+- 定期更新依赖版本，保持同步
+
+```typescript
+// 推荐
+shared: {
+  react: { 
+    singleton: true, 
+    requiredVersion: '^18.0.0',  // 兼容18.x.x版本
+    strictVersion: false  // 允许不同的次要版本
+  }
+}
+```
+
+## 4. 远程模块使用规范
+
+### 导入方式
+- 使用异步导入方式加载远程模块
+- 实现适当的加载状态和错误处理
+- 考虑使用懒加载优化性能
+
+```typescript
+// 推荐
+import React, { lazy, Suspense } from 'react';
+
+const RemoteButton = lazy(() => import('remote/Button'));
+
+const App = () => {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <RemoteButton text="Click me" />
+    </Suspense>
+  );
+};
+```
+
+### 错误处理
+- 实现远程模块加载失败的错误处理
+- 提供合理的降级方案
+- 记录错误信息便于调试
+
+```typescript
+// 推荐
+import React, { lazy, Suspense } from 'react';
+import { ErrorBoundary } from './ErrorBoundary';
+import { LocalButton } from './LocalButton';  // 降级组件
+
+const RemoteButton = lazy(() => import('remote/Button'));
+
+const App = () => {
+  return (
+    <ErrorBoundary fallback={<LocalButton text="Click me" />}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <RemoteButton text="Click me" />
+      </Suspense>
+    </ErrorBoundary>
+  );
+};
+```
+
+### 类型定义
+- 为远程模块提供明确的类型定义
+- 使用声明文件（.d.ts）定义远程模块接口
+- 避免使用any类型
+
+```typescript
+// 推荐
+// remoteTypes.d.ts
+declare module 'remote/Button' {
+  export interface ButtonProps {
+    text: string;
+    onClick?: () => void;
+    variant?: 'primary' | 'secondary';
+  }
+  
+  const Button: React.FC<ButtonProps>;
+  export default Button;
+}
+```
+
+## 5. 构建和部署规范
+
+### 构建配置
+- 使用一致的构建工具和配置
+- 优化构建输出，减少包体积
+- 配置适当的缓存策略
+
+```typescript
+// 推荐的vite.config.ts配置
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import federation from '@originjs/vite-plugin-federation';
+
+export default defineConfig({
+  plugins: [
+    react(),
+    federation({
+      name: 'remote',
+      filename: 'remoteEntry.js',
+      exposes: {
+        './Button': './src/components/Button.tsx',
+      },
+      shared: {
+        react: { singleton: true, requiredVersion: '^18.0.0' },
+        'react-dom': { singleton: true, requiredVersion: '^18.0.0' },
+      }
+    })
+  ],
+  build: {
+    target: 'esnext',
+    minify: 'terser',
+    cssCodeSplit: false,
+  }
+});
+```
+
+### 部署策略
+- 各模块独立部署，减少相互影响
+- 实现版本控制和回滚机制
+- 配置适当的CDN和缓存策略
+
+### 环境配置
+- 区分开发、测试和生产环境
+- 使用环境变量配置不同环境的远程模块URL
+- 避免硬编码远程模块地址
+
+```typescript
+// 推荐
+// vite.config.ts
+import { defineConfig } from 'vite';
+import federation from '@originjs/vite-plugin-federation';
+
+export default defineConfig({
+  plugins: [
+    federation({
+      remotes: {
+        remote: process.env.REMOTE_URL || 'http://localhost:5001/assets/remoteEntry.js',
+      }
+    })
+  ]
+});
+```
+
+## 6. 测试规范
+
+### 单元测试
+- 对暴露的模块进行单元测试
+- 模拟（mock）远程模块依赖
+- 测试不同的props组合和边界情况
+
+```typescript
+// 推荐
+// Button.test.tsx
+import { render, fireEvent } from '@testing-library/react';
+import { Button } from './Button';
+
+describe('Button Component', () => {
+  test('renders with text', () => {
+    const { getByText } = render(<Button text="Click me" />);
+    expect(getByText('Click me')).toBeInTheDocument();
+  });
+
+  test('calls onClick when clicked', () => {
+    const handleClick = jest.fn();
+    const { getByText } = render(<Button text="Click me" onClick={handleClick} />);
+    fireEvent.click(getByText('Click me'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+### 集成测试
+- 测试远程模块与宿主应用的集成
+- 验证模块间通信和数据流
+- 测试加载失败和错误处理场景
+
+### 端到端测试
+- 实现关键用户流程的端到端测试
+- 验证在真实环境中的模块联邦功能
+- 测试性能和加载时间
+
+## 7. 文档规范
+
+### 模块文档
+- 为每个暴露的模块提供清晰的文档
+- 说明模块的用途、接口和使用方法
+- 提供使用示例和注意事项
+
+### API文档
+- 详细记录暴露的API接口
+- 说明参数类型、返回值和可能的错误
+- 使用JSDoc或类似工具生成文档
+
+```typescript
+/**
+ * 按钮组件
+ * @component
+ * @param {object} props - 组件属性
+ * @param {string} props.text - 按钮文本
+ * @param {function} [props.onClick] - 点击事件处理函数
+ * @param {'primary'|'secondary'} [props.variant='primary'] - 按钮样式变体
+ * @returns {React.ReactElement} 按钮组件
+ */
+export const Button: React.FC<ButtonProps> = ({
+  text,
+  onClick,
+  variant = 'primary'
+}) => {
+  // 组件实现
+};
+```
+
+### 变更日志
+- 维护详细的变更日志
+- 记录API变更、新功能和修复的问题
+- 遵循语义化版本控制原则
+
+## 8. 性能优化规范
+
+### 代码分割
+- 合理使用代码分割，减少初始加载时间
+- 按路由或功能模块进行分割
+- 配置适当的预加载策略
+
+### 依赖优化
+- 减少重复依赖，优化共享模块
+- 控制依赖版本，避免版本冲突
+- 定期审查和更新依赖
+
+### 加载策略
+- 实现渐进式加载和预加载
+- 优化关键渲染路径
+- 使用性能监控工具评估和优化
+
+```typescript
+// 推荐的预加载策略
+// App.tsx
+import React, { useEffect } from 'react';
+
+const App = () => {
+  useEffect(() => {
+    // 预加载其他可能需要的远程模块
+    import('remote/OtherComponent');
+  }, []);
+
+  return (
+    // 应用内容
+  );
+};
+```
+
+## 注意事项
+
+1. 模块联邦是一种强大的技术，但也增加了系统复杂性，应谨慎使用
+2. 保持良好的版本控制和依赖管理，避免版本冲突
+3. 实施完善的测试策略，确保模块间集成的稳定性
+4. 关注性能指标，避免过度使用远程模块导致性能下降
+5. 定期审查和优化模块设计，确保系统的可维护性和可扩展性
