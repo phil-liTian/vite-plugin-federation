@@ -1,0 +1,454 @@
+# 前端工程化规范
+
+## 1. 架构设计原则
+
+### 分层架构
+- 采用清晰的分层架构，如表现层、业务逻辑层、数据访问层
+- 明确定义层与层之间的边界和通信方式
+- 避免跨层调用，保持单向数据流
+
+### 模块化设计
+- 基于领域驱动设计(DDD)划分模块边界
+- 实现高内聚低耦合的模块结构
+- 使用依赖注入管理模块间依赖
+
+```typescript
+// 推荐的模块结构
+src/
+  ├── domains/                 // 按业务领域划分
+  │   ├── user/
+  │   │   ├── api/             // 数据访问层
+  │   │   ├── components/      // UI组件
+  │   │   ├── hooks/           // 业务逻辑
+  │   │   ├── types/           // 类型定义
+  │   │   └── utils/           // 工具函数
+  │   └── product/
+  │       └── ...
+  ├── shared/                  // 共享资源
+  │   ├── components/          // 通用组件
+  │   ├── hooks/               // 通用钩子
+  │   └── utils/               // 通用工具
+  └── infrastructure/          // 基础设施
+      ├── api-client/          // API客户端
+      ├── store/               // 状态管理
+      └── router/              // 路由管理
+```
+
+### 微前端架构
+- 基于业务边界划分应用
+- 实现应用间的独立开发、部署和运行
+- 使用Module Federation等技术实现应用间共享
+
+### 设计模式应用
+- 合理使用设计模式解决复杂问题
+- 常用模式：观察者模式、策略模式、工厂模式、装饰器模式
+- 避免过度设计，保持代码简洁可读
+
+```typescript
+// 策略模式示例
+type ValidationStrategy = (value: string) => boolean;
+
+const validationStrategies: Record<string, ValidationStrategy> = {
+  email: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+  password: (value) => value.length >= 8,
+  required: (value) => value.trim().length > 0
+};
+
+function validate(value: string, strategyName: string): boolean {
+  const strategy = validationStrategies[strategyName];
+  if (!strategy) {
+    throw new Error(`Unknown validation strategy: ${strategyName}`);
+  }
+  return strategy(value);
+}
+```
+
+## 2. 状态管理策略
+
+### 状态分层
+- 区分UI状态、应用状态和服务器状态
+- UI状态使用组件内部状态管理
+- 应用状态使用全局状态管理
+- 服务器状态使用数据获取库管理
+
+### 状态管理选型
+- 小型应用：React Context + useReducer
+- 中型应用：Zustand、Jotai、Recoil等轻量级方案
+- 大型应用：Redux Toolkit、MobX等完整方案
+- 服务器状态：React Query、SWR等专用库
+
+### 状态设计原则
+- 保持状态最小化，避免冗余数据
+- 规范化复杂数据结构，避免嵌套过深
+- 实现状态不可变性，避免直接修改
+- 集中管理副作用，如API调用
+
+```typescript
+// 使用React Query管理服务器状态
+function useUsers() {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const response = await fetch('/api/users');
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5分钟
+    cacheTime: 30 * 60 * 1000, // 30分钟
+  });
+}
+```
+
+## 3. 性能优化实践
+
+### 渲染优化
+- 实现组件懒加载和代码分割
+- 使用React.memo、useMemo和useCallback避免不必要的重渲染
+- 虚拟化长列表，如使用react-window或react-virtualized
+- 优化重渲染路径，减少不必要的DOM操作
+
+```typescript
+// 代码分割示例
+const UserDashboard = React.lazy(() => import('./UserDashboard'));
+
+function App() {
+  return (
+    <React.Suspense fallback={<Spinner />}>
+      <UserDashboard />
+    </React.Suspense>
+  );
+}
+```
+
+### 资源优化
+- 实现资源预加载、预连接和预获取
+- 优化图片加载，使用WebP格式和响应式图片
+- 实现关键CSS内联，非关键CSS异步加载
+- 使用HTTP/2多路复用减少请求开销
+
+```html
+<!-- 资源优化示例 -->
+<link rel="preconnect" href="https://api.example.com">
+<link rel="preload" href="/fonts/main.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="prefetch" href="/assets/dashboard.js">
+```
+
+### 构建优化
+- 使用Tree Shaking移除未使用代码
+- 实现代码分割和动态导入
+- 优化依赖大小，使用bundle分析工具
+- 配置合理的缓存策略，如contenthash
+
+### 运行时优化
+- 避免主线程阻塞，使用Web Workers处理复杂计算
+- 实现请求批处理和缓存
+- 使用IntersectionObserver实现懒加载
+- 优化动画性能，使用CSS动画或requestAnimationFrame
+
+```typescript
+// 使用Web Worker处理复杂计算
+// worker.ts
+self.onmessage = (e) => {
+  const result = complexCalculation(e.data);
+  self.postMessage(result);
+};
+
+// main.ts
+const worker = new Worker('worker.js');
+worker.onmessage = (e) => {
+  setResult(e.data);
+};
+worker.postMessage(data);
+```
+
+## 4. 代码质量保障
+
+### 静态代码分析
+- 使用ESLint进行代码质量检查
+- 使用TypeScript进行静态类型检查
+- 配置Prettier保持代码风格一致
+- 使用SonarQube等工具进行深度代码分析
+
+### 测试策略
+- 实现单元测试，覆盖核心业务逻辑
+- 实现集成测试，验证组件间交互
+- 实现端到端测试，验证关键用户流程
+- 实现性能测试，监控性能指标变化
+
+```typescript
+// 组件测试示例
+import { render, screen, fireEvent } from '@testing-library/react';
+import UserForm from './UserForm';
+
+test('submits correct user data', async () => {
+  const handleSubmit = jest.fn();
+  render(<UserForm onSubmit={handleSubmit} />);
+  
+  fireEvent.change(screen.getByLabelText(/name/i), {
+    target: { value: 'John Doe' },
+  });
+  
+  fireEvent.change(screen.getByLabelText(/email/i), {
+    target: { value: 'john@example.com' },
+  });
+  
+  fireEvent.click(screen.getByRole('button', { name: /submit/i }));
+  
+  expect(handleSubmit).toHaveBeenCalledWith({
+    name: 'John Doe',
+    email: 'john@example.com',
+  });
+});
+```
+
+### 代码审查
+- 实施强制代码审查流程
+- 使用自动化工具辅助代码审查
+- 关注代码可读性、可维护性和性能
+- 定期进行架构审查，确保架构一致性
+
+### 持续集成
+- 配置CI/CD流水线，自动化构建和部署
+- 实现自动化测试，包括单元测试、集成测试和端到端测试
+- 配置代码质量门禁，阻止低质量代码合并
+- 实现自动化性能测试和安全扫描
+
+## 5. 构建与部署策略
+
+### 构建流程
+- 使用现代构建工具，如Vite、Webpack 5
+- 实现差异化构建，针对不同环境优化
+- 配置构建缓存，提高构建速度
+- 实现构建产物分析和优化
+
+```javascript
+// vite.config.js 示例
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { visualizer } from 'rollup-plugin-visualizer';
+
+export default defineConfig({
+  plugins: [
+    react(),
+    visualizer({
+      open: true,
+      gzipSize: true,
+      brotliSize: true,
+    }),
+  ],
+  build: {
+    target: 'esnext',
+    minify: 'terser',
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          ui: ['antd', '@ant-design/icons'],
+        },
+      },
+    },
+  },
+});
+```
+
+### 部署策略
+- 实现蓝绿部署或金丝雀发布
+- 配置CDN加速和边缘缓存
+- 实现静态资源版本控制和缓存策略
+- 配置服务端渲染(SSR)或静态站点生成(SSG)
+
+### 监控与告警
+- 实现前端错误监控和性能监控
+- 配置关键指标告警，如错误率、性能下降
+- 实现用户行为分析和业务指标监控
+- 配置日志收集和分析系统
+
+```typescript
+// 前端监控示例
+class ErrorMonitor {
+  init() {
+    window.addEventListener('error', this.handleError);
+    window.addEventListener('unhandledrejection', this.handleRejection);
+  }
+  
+  handleError = (event: ErrorEvent) => {
+    this.report({
+      type: 'error',
+      message: event.message,
+      stack: event.error?.stack,
+      url: window.location.href,
+    });
+  }
+  
+  handleRejection = (event: PromiseRejectionEvent) => {
+    this.report({
+      type: 'rejection',
+      message: String(event.reason),
+      stack: event.reason?.stack,
+      url: window.location.href,
+    });
+  }
+  
+  report(data: any) {
+    navigator.sendBeacon('/api/monitor', JSON.stringify(data));
+  }
+}
+```
+
+## 6. 前端安全最佳实践
+
+### XSS防护
+- 使用React等框架的自动转义功能
+- 实现内容安全策略(CSP)
+- 使用DOMPurify等库净化不可信内容
+- 避免使用危险的API，如innerHTML
+
+### CSRF防护
+- 实现CSRF Token验证
+- 使用SameSite Cookie属性
+- 验证请求来源和Referer
+- 关键操作使用二次验证
+
+### 敏感数据保护
+- 避免在前端存储敏感数据
+- 使用HTTPS加密传输数据
+- 实现适当的数据脱敏
+- 配置合理的Cookie安全属性
+
+```typescript
+// 安全的API调用示例
+async function fetchData(url: string, csrfToken: string) {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      },
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to fetch data:', error);
+    throw error;
+  }
+}
+```
+
+### 依赖安全
+- 定期更新依赖，修复安全漏洞
+- 使用npm audit或Snyk等工具扫描依赖
+- 实施依赖白名单管理
+- 配置自动化依赖更新和安全扫描
+
+## 7. 可访问性与国际化
+
+### 可访问性(A11Y)
+- 遵循WCAG 2.1 AA级标准
+- 实现键盘导航和屏幕阅读器支持
+- 提供适当的颜色对比度和文本大小
+- 实现表单错误提示和状态变化通知
+
+```jsx
+// 可访问性示例
+function AccessibleForm() {
+  return (
+    <form>
+      <div>
+        <label htmlFor="name">Name</label>
+        <input 
+          id="name" 
+          type="text" 
+          aria-required="true" 
+          aria-describedby="name-error"
+        />
+        <div id="name-error" role="alert">
+          {errors.name && errors.name.message}
+        </div>
+      </div>
+      <button type="submit" aria-busy={isSubmitting}>
+        {isSubmitting ? 'Submitting...' : 'Submit'}
+      </button>
+    </form>
+  );
+}
+```
+
+### 国际化(I18N)
+- 使用专业的国际化库，如react-i18next
+- 实现文本外部化，避免硬编码文本
+- 支持多语言切换和本地化格式
+- 考虑文本方向(RTL)和文本长度变化
+
+```typescript
+// 国际化示例
+import { useTranslation } from 'react-i18next';
+
+function WelcomeMessage() {
+  const { t, i18n } = useTranslation();
+  
+  return (
+    <div>
+      <h1>{t('welcome.title')}</h1>
+      <p>{t('welcome.message', { name: user.name })}</p>
+      <button onClick={() => i18n.changeLanguage('zh-CN')}>
+        {t('language.chinese')}
+      </button>
+      <button onClick={() => i18n.changeLanguage('en')}>
+        {t('language.english')}
+      </button>
+    </div>
+  );
+}
+```
+
+### 响应式设计
+- 实现移动优先的响应式设计
+- 使用相对单位和媒体查询
+- 支持不同设备和屏幕尺寸
+- 考虑触摸交互和手势操作
+
+## 8. 团队协作与知识共享
+
+### 文档管理
+- 维护架构决策记录(ADR)
+- 编写组件和API文档
+- 创建开发指南和最佳实践
+- 使用Storybook等工具可视化组件库
+
+### 知识共享
+- 定期进行技术分享和代码评审
+- 建立技术博客或知识库
+- 鼓励开源贡献和社区参与
+- 实施导师制和结对编程
+
+### 技术债务管理
+- 定期评估和记录技术债务
+- 分配专门时间偿还技术债务
+- 在新功能开发中避免引入新的技术债务
+- 使用指标衡量代码质量和技术债务
+
+### 持续学习
+- 跟踪前端技术发展趋势
+- 尝试新技术和方法论
+- 参与技术社区和会议
+- 建立技术雷达，指导技术选型
+
+## 注意事项
+
+1. 技术选型应基于业务需求和团队能力，避免盲目追求新技术
+2. 架构设计应考虑长期可维护性和可扩展性，而非短期开发效率
+3. 性能优化应基于实际数据和用户体验，避免过早优化
+4. 代码质量和开发速度需要平衡，在关键代码上投入更多质量保障
+5. 安全和可访问性不是事后添加的功能，而是设计之初就应考虑的要素
+6. 团队协作和知识共享对于项目长期成功至关重要
+7. 持续改进是工程文化的核心，应定期回顾和调整工程实践
