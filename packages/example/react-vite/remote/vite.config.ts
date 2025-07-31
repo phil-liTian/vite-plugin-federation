@@ -10,7 +10,8 @@ export default defineConfig({
       name: 'remoteApp',
       filename: 'remoteEntry.js',
       exposes: {
-        './Button': './src/components/Button'
+        './Button': './src/components/Button',
+        './Tag': './src/components/Tag'
       }
     })
   ],

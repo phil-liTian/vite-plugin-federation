@@ -1,0 +1,200 @@
+# 项目命名规范
+
+## 1. 文件夹和文件命名规范
+
+### 文件夹命名
+- 使用小写字母
+- 多个单词使用连字符(-)分隔
+- 语义化命名，表明文件夹用途
+- 示例：`components/`, `utils/`, `api-services/`, `shared-components/`
+
+### 文件命名
+- React/Vue组件文件使用 PascalCase
+  - 示例：`Button.tsx`, `UserProfile.vue`, `NavigationBar.tsx`
+- 其他功能文件使用 kebab-case
+  - 示例：`api-client.ts`, `use-auth.ts`, `date-utils.ts`
+- 类型定义文件使用 `.d.ts` 后缀
+  - 示例：`types.d.ts`, `api-types.d.ts`
+- 样式文件使用与组件相同的名称
+  - 示例：`Button.scss`, `UserProfile.css`
+
+## 2. 变量命名规范
+
+### 普通变量
+- 使用 camelCase
+- 语义化命名，表明变量用途
+- 避免使用单字母（除非是循环计数器）
+```typescript
+const firstName = 'John';
+const userAge = 25;
+const isActive = true;
+```
+
+### 私有变量
+- 使用下划线前缀
+```typescript
+private _count = 0;
+private _handleClick() {}
+```
+
+### 布尔值变量
+- 使用 is、has、can 等前缀
+```typescript
+const isLoading = true;
+const hasPermission = false;
+const canEdit = true;
+```
+
+## 3. 函数命名规范
+
+### 普通函数
+- 使用 camelCase
+- 动词开头，清晰表明功能
+```typescript
+function getUserData() {}
+function calculateTotal() {}
+function validateInput() {}
+```
+
+### 事件处理函数
+- 使用 handle 前缀
+```typescript
+function handleClick() {}
+function handleSubmit() {}
+function handleInputChange() {}
+```
+
+### Hook 函数
+- 使用 use 前缀
+```typescript
+function useAuth() {}
+function useWindowSize() {}
+function useDebounce() {}
+```
+
+## 4. 类命名规范
+
+- 使用 PascalCase
+- 名词开头，表明类的功能/职责
+```typescript
+class UserService {}
+class AuthenticationManager {}
+class DataValidator {}
+```
+
+## 5. 常量命名规范
+
+- 使用大写字母
+- 多个单词用下划线分隔
+```typescript
+const API_BASE_URL = 'https://api.example.com';
+const MAX_RETRY_COUNT = 3;
+const DEFAULT_TIMEOUT = 5000;
+```
+
+## 6. TypeScript 类型命名规范
+
+### 接口
+- 使用 PascalCase
+- 避免使用 I 前缀
+```typescript
+interface UserProfile {}
+interface ApiResponse {}
+interface RequestOptions {}
+```
+
+### 类型别名
+- 使用 PascalCase
+- 后缀可以使用 Type
+```typescript
+type ButtonVariant = 'primary' | 'secondary';
+type InputType = string | number;
+type ConfigType = Record<string, unknown>;
+```
+
+### 枚举
+- 使用 PascalCase
+- 枚举值使用 PascalCase
+```typescript
+enum HttpStatus {
+  Ok = 200,
+  NotFound = 404,
+  ServerError = 500
+}
+```
+
+## 7. CSS/SCSS 命名规范
+
+### BEM 命名约定
+- Block：使用小写字母，多词使用连字符
+- Element：双下划线分隔
+- Modifier：双连字符分隔
+```scss
+.card {}
+.card__header {}
+.card__title {}
+.card--featured {}
+```
+
+### 功能类
+- 使用小写字母
+- 多词使用连字符分隔
+```scss
+.text-center {}
+.bg-primary {}
+.mt-4 {}
+```
+
+### 状态类
+- 使用 is-/has- 前缀
+```scss
+.is-active {}
+.is-disabled {}
+.has-error {}
+```
+
+## 8. Git 分支和提交信息规范
+
+### 分支命名
+- 主分支：`main` 或 `master`
+- 功能分支：`feature/功能名称`
+- 修复分支：`fix/问题描述`
+- 发布分支：`release/版本号`
+- 热修复分支：`hotfix/问题描述`
+
+### 提交信息格式
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+#### Type 类型
+- feat: 新功能
+- fix: 修复问题
+- docs: 文档修改
+- style: 代码格式修改
+- refactor: 代码重构
+- test: 测试用例修改
+- chore: 其他修改
+
+#### 示例
+```
+feat(auth): implement JWT authentication
+
+- Add JWT token generation
+- Implement token validation
+- Add refresh token functionality
+
+Closes #123
+```
+
+## 注意事项
+
+1. 所有命名应该是描述性的，避免使用缩写（除非是广泛接受的缩写）
+2. 保持项目中命名风格的一致性
+3. 优先考虑代码的可读性和可维护性
+4. 遵循团队约定的命名规范
+5. 使用 ESLint 和 Prettier 等工具来强制执行命名规范
