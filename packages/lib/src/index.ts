@@ -11,7 +11,9 @@ import { builderInfo, parsedOptions } from './public'
 
 function federation(options: VitePluginFederationOptions) {
   let pluginList: PluginHooks[] = []
+  // 虚拟模块 用于生成remoteEntry.js 和 load federation
   let virtualMod
+  // let registerCount = 0
   function registerPlugins(mode: string, command: string) {
     if (mode === 'development' || command === 'serve') {
       // TODO: 测试
@@ -36,21 +38,23 @@ function federation(options: VitePluginFederationOptions) {
     name: 'vite:federation',
     enforce: 'post',
     options: (_options) => {
-      console.log('_options----', _options)
+      // 处理input
+      if (typeof _options.input === 'string') {
+        _options.input = { index: _options.input }
+      }
+
+      for (const pluginHook of pluginList) {
+        pluginHook.options?.call(this, _options)
+      }
+
+      return _options
     },
     config: (config: UserConfig, env: ConfigEnv) => {
-      console.log('config2----')
-      // console.log("config", config, env);
       options.mode = options.mode ?? env.mode
       builderInfo.assetsDir = config.build?.assetsDir ?? 'assets'
       registerPlugins(options?.mode, env.command)
     },
     configResolved(config: ResolvedConfig) {
-      console.log(
-        'configResolved----'
-        // config.plugins.map((v) => v.name)
-      )
-
       for (const pluginHook of pluginList) {
         pluginHook.configResolved?.call(this, config)
       }
@@ -75,7 +79,10 @@ function federation(options: VitePluginFederationOptions) {
       return null
       // console.log('args', args)
     },
+
     buildStart(inputOptions) {
+      console.log('_options', inputOptions.input)
+
       for (const pluginHook of pluginList) {
         pluginHook.buildStart?.call(this, inputOptions)
       }

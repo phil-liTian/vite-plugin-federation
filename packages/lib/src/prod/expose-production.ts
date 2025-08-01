@@ -1,7 +1,8 @@
 import { dirname, relative, resolve } from 'path'
 import { OutputChunk } from 'rollup'
+import type { ResolvedConfig } from 'vite'
 import { NAME_CHAR_REG, normalizePath, parseExposeOptions, removeNonRegLetter } from '../utils/index'
-import { parsedOptions, SHARED, EXTERNALS, EXPOSES_MAP, EXPOSES_KEY_MAP, DYNAMIC_LOADING_CSS, DYNAMIC_LOADING_CSS_PREFIX, builderInfo } from '../public'
+import { parsedOptions, SHARED, EXTERNALS, EXPOSES_MAP, EXPOSES_KEY_MAP, DYNAMIC_LOADING_CSS, DYNAMIC_LOADING_CSS_PREFIX, builderInfo, viteConfigResolved } from '../public'
 import { getModuleMarker } from '../utils/index'
 import { VitePluginFederationOptions } from 'types'
 import { PluginHooks } from 'types/pluginHooks'
@@ -13,7 +14,6 @@ export function prodExposePlugin(options: VitePluginFederationOptions): PluginHo
   let moduleMap = ''
 
   const hasOptions = parsedOptions.prodExpose.some((expose) => expose[0] === parseExposeOptions(options)[0]?.[0])
-  console.log('hasOptions', hasOptions)
 
   if (!hasOptions) {
     parsedOptions.prodExpose = Array.prototype.concat(parsedOptions.prodExpose, parseExposeOptions(options))
@@ -100,12 +100,15 @@ export function prodExposePlugin(options: VitePluginFederationOptions): PluginHo
       };
       async function __federation_import(name) {
         currentImports[name] ??= import(name)
+        console.log('currentImports[name]', await currentImports[name], name)
         return currentImports[name]
       };
       export const get =(module) => {
         if(!moduleMap[module]) throw new Error('Can not find remote module ' + module)
         return moduleMap[module]();
       };
+
+      // 处理share的内容
       export const init =(shareScope) => {
         globalThis.__federation_shared__= globalThis.__federation_shared__|| {};
         Object.entries(shareScope).forEach(([key, value]) => {
@@ -117,6 +120,12 @@ export function prodExposePlugin(options: VitePluginFederationOptions): PluginHo
           }
         });
       }`
+    },
+
+    configResolved(config: ResolvedConfig) {
+      if ( config ) {
+        viteConfigResolved.config = config
+      }
     },
 
     buildStart() {
@@ -142,17 +151,14 @@ export function prodExposePlugin(options: VitePluginFederationOptions): PluginHo
       }
 
       if (remoteEntryChunk) {
-        remoteEntryChunk.code = remoteEntryChunk.code.replace(`__VITE_BASE_PLACEHOLDER__`, `''`).replace('__VITE_ASSETS_DIR_PLACEHOLDER__', `''`)
+        remoteEntryChunk.code = remoteEntryChunk.code.replace(`__VITE_BASE_PLACEHOLDER__`, `'${viteConfigResolved.config?.base || ''}'`).replace('__VITE_ASSETS_DIR_PLACEHOLDER__', `'${viteConfigResolved.config?.build.assetsDir || ''}'`)
 
         for (const expose of parseExposeOptions(options)) {
           const module = Object.keys(bundle).find((module) => {
             const chunk = bundle[module] as OutputChunk
-            console.log('chunk', chunk.name)
 
             return chunk.name === EXPOSES_KEY_MAP.get(expose[0])
           })
-
-          console.log('modlue', module)
 
           if (module) {
             // console.log('module', module)
@@ -161,8 +167,8 @@ export function prodExposePlugin(options: VitePluginFederationOptions): PluginHo
             const fileRelativePath = relative(dirname(remoteEntryChunk.fileName), chunk.fileName)
 
             const slashPath = fileRelativePath.replace(/\\/g, '/')
-            console.log('slashPath', slashPath, expose[0])
-
+            console.log('slashPath', slashPath);
+            
             remoteEntryChunk.code = remoteEntryChunk.code.replace(`\${__federation_expose_${expose[0]}}`, `./${slashPath}`)
           }
         }

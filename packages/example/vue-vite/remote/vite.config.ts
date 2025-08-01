@@ -1,6 +1,6 @@
 /*
  * @Author: phil
- * @Date: 2025-07-23 17:05:58
+ * @Date: 2025-08-01 10:18:55
  */
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -11,9 +11,10 @@ export default defineConfig({
   plugins: [
     vue(),
     federation({
-      name: 'vue-host',
-      remotes: {
-        remoteApp: 'http://localhost:4173/assets/remoteEntry.js'
+      name: 'remoteApp',
+      filename: 'remoteEntry.js',
+      exposes: {
+        './Button': './src/components/Button.vue'
       }
     })
   ]

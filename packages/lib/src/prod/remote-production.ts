@@ -9,10 +9,8 @@ import { PluginHooks } from 'types/pluginHooks'
 import { builderInfo, EXPOSES_KEY_MAP, parsedOptions, prodRemotes } from '../public'
 
 export function prodRemotePlugin(options: VitePluginFederationOptions): PluginHooks {
-  console.log('prodRemotePlugin', options)
   parsedOptions.prodRemote = parseRemoteOptions(options)
 
-  console.log('parsedOptions.prodRemote', parsedOptions.prodRemote)
   for (const item of parsedOptions.prodRemote) {
     prodRemotes.push({
       id: item[0],
@@ -20,8 +18,6 @@ export function prodRemotePlugin(options: VitePluginFederationOptions): PluginHo
       config: item[1]
     })
   }
-
-  console.log('prodRemotes', prodRemotes)
 
   return {
     name: 'vite:remote-production',
@@ -32,7 +28,7 @@ export function prodRemotePlugin(options: VitePluginFederationOptions): PluginHo
       : { __federation__: '' },
 
     transform(this: TransformPluginContext, code: string, id: string) {
-      console.log('code', code, id)
+      console.log('prodRemotePlugin transform', id, code)
 
       // 是远程项目 提供组件的项目, 生成组件对应的js文件
       if (builderInfo.isRemote) {

@@ -4,6 +4,7 @@
  */
 import { ConfigTypeSet } from 'types'
 import { Remote } from './utils'
+import { ResolvedConfig } from 'vite'
 
 export const SHARED = 'shared'
 export const EXTERNALS: string[] = []
@@ -13,6 +14,10 @@ export const DYNAMIC_LOADING_CSS = 'dynamicLoadingCss'
 export const DYNAMIC_LOADING_CSS_PREFIX = '__v__css__'
 export const prodRemotes: Remote[] = []
 export const devRemotes: Remote[] = []
+
+export const viteConfigResolved: { config: ResolvedConfig | undefined } = {
+  config: undefined
+}
 
 export const builderInfo = {
   builder: 'rollup',

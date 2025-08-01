@@ -36,6 +36,9 @@ const DYNAMIC_LOADING_CSS = "dynamicLoadingCss";
 const DYNAMIC_LOADING_CSS_PREFIX = "__v__css__";
 const prodRemotes = [];
 const devRemotes = [];
+const viteConfigResolved = {
+  config: void 0
+};
 const builderInfo = {
   assetsDir: "",
   isRemote: false
@@ -83,9 +86,11 @@ function parseSharedOptions(options) {
   return parseOptions(
     options.shared || {},
     (item) => {
+      console.log("item", item);
       return {};
     },
     (item) => {
+      console.log("item", item);
       return {};
     }
   );
@@ -103,6 +108,7 @@ function parseRemoteOptions(options) {
       };
     },
     (item) => {
+      console.log("item", item);
       return {};
     }
   );
@@ -118,6 +124,7 @@ function parseExposeOptions(options) {
       };
     },
     (item) => {
+      console.log("item", item);
       return {};
     }
   );
@@ -500,7 +507,6 @@ function prodExposePlugin(options) {
     var _a;
     return expose[0] === ((_a = parseExposeOptions(options)[0]) == null ? void 0 : _a[0]);
   });
-  console.log("hasOptions", hasOptions);
   if (!hasOptions) {
     parsedOptions.prodExpose = Array.prototype.concat(parsedOptions.prodExpose, parseExposeOptions(options));
   }
@@ -578,12 +584,15 @@ function prodExposePlugin(options) {
       };
       async function __federation_import(name) {
         currentImports[name] ??= import(name)
+        console.log('currentImports[name]', await currentImports[name], name)
         return currentImports[name]
       };
       export const get =(module) => {
         if(!moduleMap[module]) throw new Error('Can not find remote module ' + module)
         return moduleMap[module]();
       };
+
+      // 处理share的内容
       export const init =(shareScope) => {
         globalThis.__federation_shared__= globalThis.__federation_shared__|| {};
         Object.entries(shareScope).forEach(([key, value]) => {
@@ -595,6 +604,11 @@ function prodExposePlugin(options) {
           }
         });
       }`
+    },
+    configResolved(config) {
+      if (config) {
+        viteConfigResolved.config = config;
+      }
     },
     buildStart() {
       var _a;
@@ -608,6 +622,7 @@ function prodExposePlugin(options) {
       }
     },
     generateBundle(_options, bundle) {
+      var _a, _b;
       let remoteEntryChunk;
       for (const file in bundle) {
         const chunk = bundle[file];
@@ -616,19 +631,17 @@ function prodExposePlugin(options) {
         }
       }
       if (remoteEntryChunk) {
-        remoteEntryChunk.code = remoteEntryChunk.code.replace(`__VITE_BASE_PLACEHOLDER__`, `''`).replace("__VITE_ASSETS_DIR_PLACEHOLDER__", `''`);
+        remoteEntryChunk.code = remoteEntryChunk.code.replace(`__VITE_BASE_PLACEHOLDER__`, `'${((_a = viteConfigResolved.config) == null ? void 0 : _a.base) || ""}'`).replace("__VITE_ASSETS_DIR_PLACEHOLDER__", `'${((_b = viteConfigResolved.config) == null ? void 0 : _b.build.assetsDir) || ""}'`);
         for (const expose of parseExposeOptions(options)) {
           const module = Object.keys(bundle).find((module2) => {
             const chunk = bundle[module2];
-            console.log("chunk", chunk.name);
             return chunk.name === EXPOSES_KEY_MAP.get(expose[0]);
           });
-          console.log("modlue", module);
           if (module) {
             const chunk = bundle[module];
             const fileRelativePath = relative(dirname(remoteEntryChunk.fileName), chunk.fileName);
             const slashPath = fileRelativePath.replace(/\\/g, "/");
-            console.log("slashPath", slashPath, expose[0]);
+            console.log("slashPath", slashPath);
             remoteEntryChunk.code = remoteEntryChunk.code.replace(`\${__federation_expose_${expose[0]}}`, `./${slashPath}`);
           }
         }
@@ -642,8 +655,8 @@ function prodExposePlugin(options) {
         if (!ast) return;
         walk(ast, {
           enter(node) {
-            var _a, _b;
-            if (node && node.type === "CallExpression" && typeof ((_a = node.arguments[0]) == null ? void 0 : _a.value) === "string" && ((_b = node.arguments[0]) == null ? void 0 : _b.value.indexOf(`${DYNAMIC_LOADING_CSS_PREFIX}`)) > -1) {
+            var _a2, _b2;
+            if (node && node.type === "CallExpression" && typeof ((_a2 = node.arguments[0]) == null ? void 0 : _a2.value) === "string" && ((_b2 = node.arguments[0]) == null ? void 0 : _b2.value.indexOf(`${DYNAMIC_LOADING_CSS_PREFIX}`)) > -1) {
               magicString.remove(node.start, node.end + 1);
             }
           }
@@ -654,9 +667,7 @@ function prodExposePlugin(options) {
   };
 }
 function prodRemotePlugin(options) {
-  console.log("prodRemotePlugin", options);
   parsedOptions.prodRemote = parseRemoteOptions(options);
-  console.log("parsedOptions.prodRemote", parsedOptions.prodRemote);
   for (const item of parsedOptions.prodRemote) {
     prodRemotes.push({
       id: item[0],
@@ -664,7 +675,6 @@ function prodRemotePlugin(options) {
       config: item[1]
     });
   }
-  console.log("prodRemotes", prodRemotes);
   return {
     name: "vite:remote-production",
     virtualFile: options.remotes ? {
@@ -709,21 +719,23 @@ function federation(options) {
     name: "vite:federation",
     enforce: "post",
     options: (_options) => {
-      console.log("_options----");
+      var _a;
+      if (typeof _options.input === "string") {
+        _options.input = { index: _options.input };
+      }
+      for (const pluginHook of pluginList) {
+        (_a = pluginHook.options) == null ? void 0 : _a.call(this, _options);
+      }
+      return _options;
     },
     config: (config, env) => {
       var _a;
-      console.log("config2----");
       options.mode = options.mode ?? env.mode;
       builderInfo.assetsDir = ((_a = config.build) == null ? void 0 : _a.assetsDir) ?? "assets";
       registerPlugins(options == null ? void 0 : options.mode, env.command);
     },
     configResolved(config) {
       var _a;
-      console.log(
-        "configResolved----"
-        // config.plugins.map((v) => v.name)
-      );
       for (const pluginHook of pluginList) {
         (_a = pluginHook.configResolved) == null ? void 0 : _a.call(this, config);
       }
@@ -746,6 +758,7 @@ function federation(options) {
     },
     buildStart(inputOptions) {
       var _a;
+      console.log("_options", inputOptions.input);
       for (const pluginHook of pluginList) {
         (_a = pluginHook.buildStart) == null ? void 0 : _a.call(this, inputOptions);
       }
